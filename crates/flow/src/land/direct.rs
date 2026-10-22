@@ -53,5 +53,15 @@ fn push_it(id: &str, g: &mut Guard, t: &Task, tree: &str, b: &str, how: &str) ->
         return fail(g, &format!("Could not push to {b}"), &format!("Task branch: {}\nPushed to: origin/{b}\n\nWhat git said:\n{}\n\nNothing was merged.", t.s("branch"), e.msg),
             &format!("Check that origin takes a push to {b} (a protected branch, a pre-push hook, a login), then approve again."), Fail { agent_can_fix: false, auth: None, keep_intent: false });
     }
+    sync_local(tp, b);
     landed(id, g, t, &format!("Merged into {b} at the remote"), &head, &new)
+}
+
+/// Brings a local copy of `b` up to date with what was just pushed, when no worktree has it checked out. A branch that is
+/// checked out is left alone (git refuses to update it): its own `git pull --ff-only` brings it forward. Best effort: a
+/// local branch that has moved on its own is left as it is, by the same fast-forward check git makes.
+pub fn sync_local(tp: &Path, b: &str) {
+    if git_out(tp, &["rev-parse", "--verify", "-q", &format!("refs/heads/{b}")]).is_err() { return; }
+    // One fetch updates origin/b and the local branch together, and refuses when b is checked out or not a fast-forward.
+    let _ = fetch::with_repo_lock(tp, || Ok(git_out(tp, &["fetch", "origin", &format!("{b}:{b}")]).map(|_| ())));
 }
